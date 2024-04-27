@@ -38,7 +38,7 @@ DEFAULT_TIPO_USUARIO = "clienteUnCons"
 
 DEFAULT_URL_LOGIN = 'https://agenciaweb.celesc.com.br/AgenciaWeb/autenticar/autenticar.do'
 DEFAULT_URL_AUTENTICA = 'https://agenciaweb.celesc.com.br/AgenciaWeb/autenticar/validarSenha.do'
-DEFAULT_URL_LEITURA = 'https://agenciaweb.celesc.com.br/AgenciaWeb/consultarDataLeitura/consultarDataLeitura.do'
+DEFAULT_URL_LEITURA = 'https://agenciaweb.celesc.com.br/AgenciaWeb/consultarHistoricoConsumo/consultarHistoricoConsumo.do'
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_UNIDADE_CONSUMIDORA): cv.string,
@@ -157,8 +157,17 @@ class Celesc(Entity):
             
             #verifica se autenticou comparando o cpf
             if success == self._cpf:
-                leitura = session.post(self._url_leitura)
-                soup = BeautifulSoup(leitura.text, 'html.parser')
+
+                #realiza a pesquisa
+                payload = {
+                    'mesInicial': '10',
+                    'anoInicial': '2023',
+                    'mesFinal': date.today().month,
+                    'anoFinal': date.today().year
+                }
+
+                pesquisa = session.post(self._url_leitura, data=payload)
+                soup = BeautifulSoup(pesquisa.text, 'html.parser')
 
                 #pega as informações da sexta tabela na página HTML
                 tbody = soup.select('table')[5]
@@ -177,20 +186,17 @@ class Celesc(Entity):
                     if len(cols) > 0:
                         
                         #pega a data de leitura que fica na terceira coluna
-                        captura_data = cols[2].find(text=True).strip()
+                        captura_faturado = cols[1].find(text=True).strip()
 
                         #verifica se a coluna não está vazia
-                        if captura_data != '------':
+                        if len(captura_faturado) >=  0:
                             
                             #separa a data em várivaveis para converter em date
-                            y1, m1, d1 = [int(x) for x in (captura_data.split('-'))]
-
-                            #converte a data em tipo date
-                            data_prevista_leitura = date(y1, m1, d1) 
+                            total_faturado = captura_faturado.replace("Consumo", "")
 
                             #compara a data atual com a data_prevista_leitura, se a data for maior que a atual, será a próxima leitura e seta a variável leitura_visualizada para true
-                            if data_prevista_leitura > data_atual and leitura_visualizada == False:
-                                self._state = data_prevista_leitura.strftime("%d/%m/%Y") #atualiza o valor do sensor com a data no formato brasileiro
+                            if leitura_visualizada == False:
+                                self._state = total_faturado
                                 leitura_visualizada = True
 
             else:
